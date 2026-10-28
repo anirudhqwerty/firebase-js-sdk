@@ -67,7 +67,9 @@ describe('Firebase Performance > iid_service', () => {
       };
       window.addEventListener('unhandledrejection', listener);
       try {
-        await expect(getAuthTokenPromise(fakeInstallations)).rejects.toBe(error);
+        await expect(getAuthTokenPromise(fakeInstallations)).rejects.toBe(
+          error
+        );
         await new Promise(resolve => setTimeout(resolve, 100));
         expect(unhandled).toEqual([]);
         expect(getAuthenticationToken()).toBe(previousToken);

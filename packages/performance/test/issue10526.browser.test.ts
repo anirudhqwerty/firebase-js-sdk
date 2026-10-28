@@ -52,6 +52,7 @@ it('handles a blocked registration through the real browser SDK paths', async ()
     await vi.waitFor(() => expect(rejects).toHaveLength(1));
     rejects[0](networkError);
     await new Promise(resolve => setTimeout(resolve, 100));
+    const registrationConsoleErrors = errors.mock.calls.length;
 
     const token = getAuthTokenPromise({
       getId: () => getId(installations),
@@ -69,6 +70,7 @@ it('handles a blocked registration through the real browser SDK paths', async ()
       fidResolved: true,
       tokenRejectedToCaller: true,
       networkAttempts: rejects.length,
+      registrationConsoleErrors,
       consoleErrors: errors.mock.calls.length,
       unhandledRejections: unhandled.length
     };

@@ -87,13 +87,23 @@ describe('getId', () => {
   it('returns the FID without logging a background registration failure', async () => {
     let rejectRegistration!: (reason: Error) => void;
     const registrationPromise = new Promise<RegisteredInstallationEntry>(
-      (_, reject) => { rejectRegistration = reject; }
+      (_, reject) => {
+        rejectRegistration = reject;
+      }
     );
-    vi.spyOn(getInstallationEntryModule, 'getInstallationEntry').mockResolvedValue({
-      installationEntry: { fid: FID, registrationStatus: RequestStatus.NOT_STARTED },
+    vi.spyOn(
+      getInstallationEntryModule,
+      'getInstallationEntry'
+    ).mockResolvedValue({
+      installationEntry: {
+        fid: FID,
+        registrationStatus: RequestStatus.NOT_STARTED
+      },
       registrationPromise
     });
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
 
     expect(await getId(installations)).toBe(FID);
     rejectRegistration(new TypeError('registration network failure'));
@@ -103,7 +113,10 @@ describe('getId', () => {
   });
 
   it('returns the FID without logging a background token refresh failure', async () => {
-    vi.spyOn(getInstallationEntryModule, 'getInstallationEntry').mockResolvedValue({
+    vi.spyOn(
+      getInstallationEntryModule,
+      'getInstallationEntry'
+    ).mockResolvedValue({
       installationEntry: {
         fid: FID,
         registrationStatus: RequestStatus.COMPLETED,
@@ -112,8 +125,12 @@ describe('getId', () => {
       }
     });
     const error = new TypeError('token refresh network failure');
-    vi.spyOn(refreshAuthTokenModule, 'refreshAuthToken').mockRejectedValue(error);
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(refreshAuthTokenModule, 'refreshAuthToken').mockRejectedValue(
+      error
+    );
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
 
     expect(await getId(installations)).toBe(FID);
     await new Promise(resolve => setTimeout(resolve, 0));
@@ -123,7 +140,10 @@ describe('getId', () => {
 
   it('propagates failures retrieving the installation entry', async () => {
     const error = new Error('installation entry failure');
-    vi.spyOn(getInstallationEntryModule, 'getInstallationEntry').mockRejectedValue(error);
+    vi.spyOn(
+      getInstallationEntryModule,
+      'getInstallationEntry'
+    ).mockRejectedValue(error);
 
     await expect(getId(installations)).rejects.toBe(error);
   });
