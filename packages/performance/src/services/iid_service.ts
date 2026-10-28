@@ -40,11 +40,10 @@ export function getAuthTokenPromise(
   installationsService: _FirebaseInstallationsInternal
 ): Promise<string> {
   const authTokenPromise = installationsService.getToken();
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  authTokenPromise.then((authTokenVal: string) => {
+  return authTokenPromise.then((authTokenVal: string) => {
     authToken = authTokenVal;
+    return authTokenVal;
   });
-  return authTokenPromise;
 }
 
 export function getAuthenticationToken(): string | undefined {
