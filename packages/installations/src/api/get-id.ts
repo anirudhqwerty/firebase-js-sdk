@@ -32,12 +32,14 @@ export async function getId(installations: Installations): Promise<string> {
   const { installationEntry, registrationPromise } =
     await getInstallationEntry(installationsImpl);
 
+  // Registration and token refresh are background operations. Keep their
+  // failures handled without logging them from an ID-only operation.
   if (registrationPromise) {
-    registrationPromise.catch(console.error);
+    registrationPromise.catch(() => {});
   } else {
     // If the installation is already registered, update the authentication
     // token if needed.
-    refreshAuthToken(installationsImpl).catch(console.error);
+    refreshAuthToken(installationsImpl).catch(() => {});
   }
 
   return installationEntry.fid;
