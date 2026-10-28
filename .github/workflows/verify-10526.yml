@@ -43,6 +43,23 @@ jobs:
           yarn workspace @firebase/performance build:deps
       - name: Install Chromium on runner
         run: yarn playwright install --with-deps chromium
+      - name: Record Performance test-type baseline on unchanged main
+        run: |
+          cp packages/performance/src/services/iid_service.test.ts "$RUNNER_TEMP/candidate-iid-service.test.ts"
+          mv packages/performance/test/issue10526.browser.test.ts "$RUNNER_TEMP/issue10526.browser.test.ts"
+          git show 0079975f661d9158ebbf22055b3903b00bd4a48a:packages/performance/src/services/iid_service.test.ts > packages/performance/src/services/iid_service.test.ts
+          set +e
+          yarn --cwd packages/performance tsc -p . --noEmit --pretty false > evidence/performance-types-baseline.log 2>&1
+          status=$?
+          set -e
+          cat evidence/performance-types-baseline.log
+          test "$status" -eq 2
+          grep 'error TS' evidence/performance-types-baseline.log > evidence/baseline-type-errors.txt
+          test "$(wc -l < evidence/baseline-type-errors.txt)" -eq 2
+          grep -F 'perf_logger.test.ts(66,7): error TS2349' evidence/baseline-type-errors.txt
+          grep -F 'remote_config_service.test.ts(102,39): error TS2345' evidence/baseline-type-errors.txt
+          cp "$RUNNER_TEMP/candidate-iid-service.test.ts" packages/performance/src/services/iid_service.test.ts
+          mv "$RUNNER_TEMP/issue10526.browser.test.ts" packages/performance/test/issue10526.browser.test.ts
       - name: Confirm Installations regression fails
         run: |
           set +e
@@ -83,12 +100,22 @@ jobs:
         run: |
           yarn workspace @firebase/performance test:browser 2>&1 | tee evidence/performance-green.log
           grep -F '"registrationConsoleErrors":0,"consoleErrors":0,"unhandledRejections":0' evidence/performance-green.log
-      - name: Relevant package lint and typechecks
+      - name: Relevant package lint and Installations typecheck
         run: |
           yarn workspace @firebase/installations lint
           yarn workspace @firebase/performance lint
           yarn workspace @firebase/installations type-check
-          yarn --cwd packages/performance tsc -p . --noEmit
+      - name: Compare Performance test-type failures with unchanged main
+        run: |
+          set +e
+          yarn --cwd packages/performance tsc -p . --noEmit --pretty false > evidence/performance-types-candidate.log 2>&1
+          status=$?
+          set -e
+          cat evidence/performance-types-candidate.log
+          test "$status" -eq 2
+          grep 'error TS' evidence/performance-types-candidate.log > evidence/candidate-type-errors.txt
+          diff -u evidence/baseline-type-errors.txt evidence/candidate-type-errors.txt
+          echo 'Performance package-wide tsc still fails with exactly the same two pre-existing test errors; no added errors.'
       - name: Validate changeset and format
         run: |
           yarn changeset status --since 0079975f661d9158ebbf22055b3903b00bd4a48a
