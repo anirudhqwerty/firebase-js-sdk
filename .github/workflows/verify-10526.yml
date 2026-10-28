@@ -1,0 +1,78 @@
+name: Focused issue 10526 browser verification
+on:
+  push:
+    branches: [verify/issue-10526]
+permissions:
+  contents: read
+jobs:
+  baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      NODE_OPTIONS: --max-old-space-size=4096
+      VITEST_MAX_FORKS: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+          cache: yarn
+      - name: Configure and install
+        run: |
+          cp config/ci.config.json config/project.json
+          yarn install --frozen-lockfile
+          mkdir -p evidence
+          git rev-parse HEAD
+          node --version
+          yarn --version
+      - name: Build affected packages and dependencies
+        run: yarn workspace @firebase/performance build:deps
+      - name: Install Chromium on runner
+        run: yarn playwright install --with-deps chromium
+      - name: Format changed tests using repository command
+        env:
+          GITHUB_PULL_REQUEST_BASE_SHA: 0079975f661d9158ebbf22055b3903b00bd4a48a
+        run: yarn format
+      - name: Confirm Installations regression fails
+        run: |
+          set +e
+          yarn workspace @firebase/installations test:browser src/api/get-id.test.ts > evidence/installations.log 2>&1
+          status=$?
+          set -e
+          cat evidence/installations.log
+          test "$status" -eq 1
+          grep -F 'background registration failure' evidence/installations.log
+          grep -F 'background token refresh failure' evidence/installations.log
+      - name: Confirm Performance regression fails
+        run: |
+          set +e
+          yarn workspace @firebase/performance test:browser src/services/iid_service.test.ts > evidence/performance.log 2>&1
+          status=$?
+          set -e
+          cat evidence/performance.log
+          test "$status" -eq 1
+          grep -F 'token retrieval network failure' evidence/performance.log
+      - name: Confirm real SDK reproduction fails for both reported symptoms
+        run: |
+          set +e
+          yarn workspace @firebase/performance test:browser test/issue10526.browser.test.ts > evidence/sdk-reproduction.log 2>&1
+          status=$?
+          set -e
+          cat evidence/sdk-reproduction.log
+          test "$status" -eq 1
+          grep -F '"consoleErrors":1,"unhandledRejections":1' evidence/sdk-reproduction.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: issue10526-browser-evidence
+          path: |
+            evidence/
+            packages/installations/src/api/get-id.test.ts
+            packages/performance/src/services/iid_service.test.ts
+            packages/performance/test/issue10526.browser.test.ts
