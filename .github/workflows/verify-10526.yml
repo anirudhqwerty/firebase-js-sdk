@@ -5,7 +5,7 @@ on:
 permissions:
   contents: read
 jobs:
-  baseline:
+  red-green:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     defaults:
@@ -15,6 +15,7 @@ jobs:
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
       NODE_OPTIONS: --max-old-space-size=4096
       VITEST_MAX_FORKS: '1'
+      GITHUB_PULL_REQUEST_BASE_SHA: 0079975f661d9158ebbf22055b3903b00bd4a48a
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,14 +32,17 @@ jobs:
           git rev-parse HEAD
           node --version
           yarn --version
-      - name: Build affected packages and dependencies
-        run: yarn workspace @firebase/performance build:deps
+      - name: Format changed source and tests using repository command
+        run: yarn format
+      - name: Build unchanged production baseline
+        run: |
+          cp packages/installations/src/api/get-id.ts "$RUNNER_TEMP/candidate-get-id.ts"
+          cp packages/performance/src/services/iid_service.ts "$RUNNER_TEMP/candidate-iid-service.ts"
+          git show 0079975f661d9158ebbf22055b3903b00bd4a48a:packages/installations/src/api/get-id.ts > packages/installations/src/api/get-id.ts
+          git show 0079975f661d9158ebbf22055b3903b00bd4a48a:packages/performance/src/services/iid_service.ts > packages/performance/src/services/iid_service.ts
+          yarn workspace @firebase/performance build:deps
       - name: Install Chromium on runner
         run: yarn playwright install --with-deps chromium
-      - name: Format changed tests using repository command
-        env:
-          GITHUB_PULL_REQUEST_BASE_SHA: 0079975f661d9158ebbf22055b3903b00bd4a48a
-        run: yarn format
       - name: Confirm Installations regression fails
         run: |
           set +e
@@ -66,7 +70,30 @@ jobs:
           set -e
           cat evidence/sdk-reproduction.log
           test "$status" -eq 1
-          grep -F '"consoleErrors":1,"unhandledRejections":1' evidence/sdk-reproduction.log
+          grep -F '"registrationConsoleErrors":1' evidence/sdk-reproduction.log
+          grep -F '"unhandledRejections":1' evidence/sdk-reproduction.log
+      - name: Restore and build candidate
+        run: |
+          cp "$RUNNER_TEMP/candidate-get-id.ts" packages/installations/src/api/get-id.ts
+          cp "$RUNNER_TEMP/candidate-iid-service.ts" packages/performance/src/services/iid_service.ts
+          yarn workspace @firebase/performance build:deps 2>&1 | tee evidence/candidate-build.log
+      - name: All Installations browser unit tests
+        run: yarn workspace @firebase/installations test:browser 2>&1 | tee evidence/installations-green.log
+      - name: All Performance browser unit tests and real SDK reproduction
+        run: |
+          yarn workspace @firebase/performance test:browser 2>&1 | tee evidence/performance-green.log
+          grep -F '"registrationConsoleErrors":0,"consoleErrors":0,"unhandledRejections":0' evidence/performance-green.log
+      - name: Relevant package lint and typechecks
+        run: |
+          yarn workspace @firebase/installations lint
+          yarn workspace @firebase/performance lint
+          yarn workspace @firebase/installations type-check
+          yarn --cwd packages/performance tsc -p . --noEmit
+      - name: Validate changeset and format
+        run: |
+          yarn changeset status --since 0079975f661d9158ebbf22055b3903b00bd4a48a
+          yarn format
+          git diff --stat
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -76,3 +103,5 @@ jobs:
             packages/installations/src/api/get-id.test.ts
             packages/performance/src/services/iid_service.test.ts
             packages/performance/test/issue10526.browser.test.ts
+            packages/installations/src/api/get-id.ts
+            packages/performance/src/services/iid_service.ts
