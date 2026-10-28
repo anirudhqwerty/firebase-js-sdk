@@ -54,5 +54,26 @@ describe('Firebase Performance > iid_service', () => {
       expect(token).toBe(AUTH_TOKEN);
       expect(getAuthenticationToken()).toBe(AUTH_TOKEN);
     });
+
+    it('propagates a token failure without an unhandled rejection or changing the cached token', async () => {
+      const error = new TypeError('token retrieval network failure');
+      vi.mocked(fakeInstallations.getToken).mockRejectedValue(error);
+      const previousToken = getAuthenticationToken();
+      const unhandled: unknown[] = [];
+      const listener = (event: PromiseRejectionEvent): void => {
+        if (event.reason === error) {
+          unhandled.push(event.reason);
+        }
+      };
+      window.addEventListener('unhandledrejection', listener);
+      try {
+        await expect(getAuthTokenPromise(fakeInstallations)).rejects.toBe(error);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        expect(unhandled).toEqual([]);
+        expect(getAuthenticationToken()).toBe(previousToken);
+      } finally {
+        window.removeEventListener('unhandledrejection', listener);
+      }
+    });
   });
 });

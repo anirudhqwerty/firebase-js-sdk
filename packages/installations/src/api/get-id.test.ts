@@ -83,4 +83,48 @@ describe('getId', () => {
     await getId(installations);
     expect(refreshAuthTokenModule.refreshAuthToken).toHaveBeenCalledTimes(1);
   });
+
+  it('returns the FID without logging a background registration failure', async () => {
+    let rejectRegistration!: (reason: Error) => void;
+    const registrationPromise = new Promise<RegisteredInstallationEntry>(
+      (_, reject) => { rejectRegistration = reject; }
+    );
+    vi.spyOn(getInstallationEntryModule, 'getInstallationEntry').mockResolvedValue({
+      installationEntry: { fid: FID, registrationStatus: RequestStatus.NOT_STARTED },
+      registrationPromise
+    });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await getId(installations)).toBe(FID);
+    rejectRegistration(new TypeError('registration network failure'));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('returns the FID without logging a background token refresh failure', async () => {
+    vi.spyOn(getInstallationEntryModule, 'getInstallationEntry').mockResolvedValue({
+      installationEntry: {
+        fid: FID,
+        registrationStatus: RequestStatus.COMPLETED,
+        refreshToken: 'refreshToken',
+        authToken: { requestStatus: RequestStatus.NOT_STARTED }
+      }
+    });
+    const error = new TypeError('token refresh network failure');
+    vi.spyOn(refreshAuthTokenModule, 'refreshAuthToken').mockRejectedValue(error);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await getId(installations)).toBe(FID);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('propagates failures retrieving the installation entry', async () => {
+    const error = new Error('installation entry failure');
+    vi.spyOn(getInstallationEntryModule, 'getInstallationEntry').mockRejectedValue(error);
+
+    await expect(getId(installations)).rejects.toBe(error);
+  });
 });
